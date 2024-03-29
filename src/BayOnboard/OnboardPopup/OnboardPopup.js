@@ -285,13 +285,21 @@ function OnboardPopup() {
       setEndPos({ x, y });
     }
   };
-
+  const MINIMUM_AREA = 700;
   const handleMouseUp = () => {
     // setMissingId(result);
     if (drawing) {
       const result = findMissingId(boxProps);
       // console.log("ID", result);
       setDrawing(false);
+      const width = Math.abs(endPos.x - startPos.x);
+      const height = Math.abs(endPos.y - startPos.y);
+
+      // Check if the area is greater than the minimum area
+      if (width * height < MINIMUM_AREA) {
+        alert("Rectangle area is too small. Please draw a larger rectangle.");
+        return;
+      }
       const box = {
         // id: bayId + 1,
         id: result,
@@ -751,9 +759,7 @@ function OnboardPopup() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog
-        open={requiredSort}
-      >
+      <Dialog open={requiredSort}>
         <DialogContent className="">
           <div className="w-full h-full flex flex-col space-y-4 m-auto">
             <div className="m-auto text-5xl">
@@ -762,7 +768,8 @@ function OnboardPopup() {
             <div id="poppinsFont" className="m-auto flex flex-col space-y-3">
               <span className="text-xl text-wrap text-center self-center">
                 {" "}
-                Sorting the table is required <br /> before plotting bays further
+                Sorting the table is required <br /> before plotting bays
+                further
               </span>
               <span className=" text-sm text-gray-600 self-center">
                 (Please click sort to continue)
