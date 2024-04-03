@@ -21,7 +21,7 @@ import Box from "@mui/material/Box";
 // react-icons imports
 import { GrUndo } from "react-icons/gr";
 import { FaMapMarkedAlt } from "react-icons/fa";
-import { LuSettings2 } from "react-icons/lu";
+// import { LuSettings2 } from "react-icons/lu";
 import { FaMinus } from "react-icons/fa";
 import { FaPlus } from "react-icons/fa";
 import { MdDelete } from "react-icons/md";
@@ -35,7 +35,8 @@ import { AiOutlineExclamationCircle } from "react-icons/ai";
 import DynamicButton from "../components/DynamicButton";
 
 // assets
-import floorLayout from "../../assets/floor_layout.png";
+import floorLayout from "../../assets/orionfloor.jpg";
+// import floorLayout from "../../assets/floor_layout.png";
 
 // options
 const brandsOptions = ["Zivame", "Clovia", "Amanté", "Jockey"];
@@ -59,10 +60,11 @@ function OnboardPopup() {
   const [imgOffset, setImgOffset] = useState({ x: 0, y: 0 }); // Img dist. from left wrt VP
   const [startPos, setStartPos] = useState({ x: 0, y: 0 }); // Box starts drawing from
   const [endPos, setEndPos] = useState({ x: 0, y: 0 }); // Box stops drawing at
-  const [bayId, setBayId] = useState(0); // Bay Number
+  // const [bayId, setBayId] = useState(0); // Bay Number
   // const [predBoxes, setPredBoxes] = useState([]);
   const [boxProps, setBoxProps] = useState([]); // Stores the data to print the annotations
   const [scaledBoxProps, setScaledBoxProps] = useState([]); // Stores the annotation data to be sent through the API call
+  // eslint-disable-next-line
   const [hoveredBoxId, setHoveredBoxId] = useState(null); // Stores the ID of the Hovered bay
   const [popoverData, setPopoverData] = useState({});
   const [isAscendingOrder, setIsAscendingOrder] = useState(null);
