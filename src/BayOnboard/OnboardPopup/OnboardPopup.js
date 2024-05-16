@@ -30,6 +30,8 @@ import { MdOutlineCleaningServices } from "react-icons/md";
 import { BsDot } from "react-icons/bs";
 import { IoSettingsSharp } from "react-icons/io5";
 import { AiOutlineExclamationCircle } from "react-icons/ai";
+import { FaDrawPolygon } from "react-icons/fa6";
+import { FaCheck } from "react-icons/fa6";
 
 // project imports
 import DynamicButton from "../components/DynamicButton";
@@ -70,6 +72,13 @@ function OnboardPopup() {
   const [isAscendingOrder, setIsAscendingOrder] = useState(null);
   const [requiredSort, setRequiredSort] = useState(false);
   // const [popupId, setPopupId] = useState(null);
+
+  const [drawingData, setDrawingData] = useState([]); // stores drawing points for currently active bays anotation
+  const [startPoint, setStartPoint] = useState(null); // anotation starts from this point
+  const [savedPolygons, setSavedPolygons] = useState([]); // stores all anotated polygons data
+
+  const [annotating, setAnnotating] = useState(false); // True when anotation button is pressed, indicates anotation is active within a bay
+  const [annotatingBayId, setAnnotatingBayId] = useState(null); // Stores currently active bay's ID for anotation
 
   //! UseRefs
   const imageRef = useRef(null);
@@ -119,6 +128,12 @@ function OnboardPopup() {
       setBoxProps(newBoxProps);
       setScaledBoxProps(newScaledBoxProps);
       // setBayId(bayId - 1);
+
+      // setStartPoint(null)
+      // setDrawingData([])
+      // setSavedPolygons([])
+      // setAnnotating(false)
+      handleDone()
     }
   };
 
@@ -127,6 +142,11 @@ function OnboardPopup() {
     const updatedBoxProps = boxProps.filter((box) => box.id !== id);
     // setBayId(id - 1);
     setBoxProps(updatedBoxProps);
+    setStartPoint(null)
+    setDrawingData([])
+    // setSavedPolygons([])
+    setAnnotating(false)
+    setAnnotatingBayId(null)
   };
 
   // change bay no.
@@ -187,6 +207,11 @@ function OnboardPopup() {
   const handleClear = () => {
     setBoxProps([]);
     // setBayId(0);
+    setStartPoint(null)
+    setDrawingData([])
+    setSavedPolygons([])
+    setAnnotating(false)
+    setAnnotatingBayId(null)
   };
 
   const checkAscendingOrder = (array) => {
@@ -263,9 +288,17 @@ function OnboardPopup() {
     setPlottedDimensions({ width: width, height: height });
     setImgOffset({ x: left, y: top });
   };
+  // console.log("imgSize ", imgSize)
+  // console.log("realDimension ", realDimension)
+  // console.log("plottedDimensions ", plottedDimensions)
+  // console.log("imgOffset ", imgOffset)
+  // console.log("boxProps ", boxProps)
 
   //? Annotation with mouse click functions
   const handleMouseDown = (event) => {
+    if(annotating) {
+      return
+    }
     event.preventDefault();
     setDrawing(true);
     const x = event.clientX;
@@ -365,6 +398,113 @@ function OnboardPopup() {
     // eslint-disable-next-line
   }, [boxProps]);
 
+
+  // Image annotation
+  
+  const handleAnnotateBay = (event, id) => {
+    if(id === annotatingBayId){ // if annotatingBayId is not null and anotating bay is same as seleceted bay, this means the selection is shifted without pressing done
+      setAnnotating(false);
+      setAnnotatingBayId(null);
+    } else{
+      setAnnotating(true);
+      setAnnotatingBayId(id);
+    }
+    handleDone(event, id)         // Whenever selected bay is to be changed, complete the polygon drawing and then change
+
+  }
+
+  useEffect(() => {
+    if(annotatingBayId) {
+      const polygonWithAnnotatingBayId = savedPolygons.filter(polygon => polygon.bayId === annotatingBayId);
+      if(polygonWithAnnotatingBayId.length !== 0) {
+        setStartPoint(polygonWithAnnotatingBayId[0].startPoint);
+        setDrawingData(polygonWithAnnotatingBayId[0].polygonData);
+        const updatedSavedPolygons = savedPolygons.filter(polygon => polygon.bayId !== annotatingBayId);
+        setSavedPolygons(updatedSavedPolygons)
+      }
+    } 
+  }, [annotatingBayId])
+
+  const handleMouseDownOnBay = (e, bayId) => {
+    if (drawing || !annotating || (bayId!==annotatingBayId)) {
+      return;
+    }
+    const offsetX = e.clientX;
+    const offsetY = e.clientY;
+    
+    if (startPoint) {
+      // Draw line if startPoint exists
+      setDrawingData((prevData) => [
+        ...prevData,
+        { start: startPoint, end: { x: offsetX, y: offsetY } },
+      ]);
+      setStartPoint({ x: offsetX, y: offsetY });
+    } else {
+      // Set startPoint if it doesn't exist
+      setStartPoint({ x: offsetX, y: offsetY });
+    }
+    console.log("drawingData ", drawingData)
+  };
+
+  const calculateHighlightPoints = () => {
+    const points = drawingData.map((line) => [line.start.x, line.start.y]);
+
+    if (points.length >= 3) {
+      // Add the last line's end point to close the shape for highlighting
+      points.push([
+        drawingData[drawingData.length - 1].end.x,
+        drawingData[drawingData.length - 1].end.y,
+      ]);
+    }
+
+    return points;
+  };
+
+  const handleUndoDrawing = () => {
+    if (drawingData.length > 0) {
+      // Remove the last drawn line segment
+      setDrawingData((prevData) => prevData.slice(0, -1));
+
+      // If there are points left, update the startPoint to the last drawn point
+      if (drawingData.length > 1) {
+        setStartPoint({
+          x: drawingData[drawingData.length - 2].end.x,
+          y: drawingData[drawingData.length - 2].end.y,
+        });
+      } else {
+        // If no points left, reset startPoint to null
+        setStartPoint(null);
+      }
+    }
+  };
+
+  const handleDone = (e, bayId) => {
+    if (drawingData.length > 0) {
+      // Include the last dot when clicking "Done"
+      const completedPolygon = [
+        ...drawingData,
+        {
+          start: drawingData[drawingData.length - 1].end,
+          end: drawingData[0].start,
+        },
+      ];
+      const polygon = {
+        bayId: bayId,
+        polygonData: completedPolygon,
+        startPoint: startPoint
+      }
+      // Save the drawn polygon to the list of saved polygons
+      setSavedPolygons((prevPolygons) => [...prevPolygons, polygon]);
+    }
+
+    // Reset drawingData and startPoint for a new polygon
+    setDrawingData([]);
+    setStartPoint(null);
+
+  };
+
+  // console.log("boxProps ", boxProps)
+  // console.log("savedPolygons ", savedPolygons)
   return (
     <>
       {/*Map button*/}
@@ -440,7 +580,7 @@ function OnboardPopup() {
             </div>
             {/*Annotation Content*/}
             <div className="flex-grow flex">
-              <div className="flex-grow px-2 py-2 flex justify-center">
+              <div className="w-[70vw] px-2 py-2 flex justify-center">
                 <div
                   onMouseDown={handleMouseDown}
                   onMouseMove={handleMouseMove}
@@ -458,17 +598,17 @@ function OnboardPopup() {
                   {boxProps.map((box) => (
                     <div
                       key={box.id}
-                      className={`absolute border-2 border-white cursor-not-allowed ${
-                        hoveredBoxId === box.id
-                          ? "border-lime-500 bg-lime-500 bg-opacity-[.3]"
-                          : ""
-                      }`}
+                      className={`absolute border-2 border-${box.id === annotatingBayId?"green-500":"white"} cursor-${annotatingBayId === box.id ? "pointer":"not-allowed"} ${hoveredBoxId === box.id
+                        ? "border-lime-500 bg-lime-500 bg-opacity-[.3]"
+                        : ""
+                        }`}
                       style={{
                         left: box.x1,
                         top: box.y1,
                         width: box.width,
                         height: box.height,
                       }}
+                      onMouseDown={(e) => handleMouseDownOnBay(e, box.id)}
                     >
                       <span className="relative text-white -top-6 left-1">
                         Bay {box.id}
@@ -489,11 +629,74 @@ function OnboardPopup() {
                       }}
                     />
                   )}
+
+                  {/*bay annotation */}
+                  {drawingData.map((line, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        position: "absolute",
+                        top: line.start.y,
+                        left: line.start.x,
+                        width: Math.sqrt(
+                          Math.pow(line.end.x - line.start.x, 2) +
+                          Math.pow(line.end.y - line.start.y, 2)
+                        ),
+                        height: 2,
+                        backgroundColor: "red",
+                        transform: `rotate(${Math.atan2(
+                          line.end.y - line.start.y,
+                          line.end.x - line.start.x
+                        )}rad)`,
+                        transformOrigin: "0 0",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  ))}
+                  {startPoint && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: startPoint.y - 2,
+                        left: startPoint.x - 2,
+                        width: 4,
+                        height: 4,
+                        backgroundColor: "red",
+                        borderRadius: "50%",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  )}
+                  <svg
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      pointerEvents: "none",
+                    }}
+                    width="100%"
+                    height="100%"
+                  >
+                    {savedPolygons.map(({polygonData}, polyIndex) => (
+                      <polygon
+                        key={polyIndex}
+                        fill="rgba(0, 255, 0, 0.3)"
+                        points={polygonData
+                          .flatMap((point) => [point.start.x, point.start.y])
+                          .join(" ")}
+                      />
+                    ))}
+
+                    <polygon
+                      fill="rgba(0, 255, 0, 0.3)"
+                      points={calculateHighlightPoints().flat().join(" ")}
+                    />
+                  </svg>
                 </div>
               </div>
               {/*Table Content*/}
-              <Card className="">
-                <div className="w-[385px] h-[90vh] overflow-y-auto scrollbar">
+              <Card className="flex-1">
+                <div className="h-[90vh] overflow-y-auto scrollbar">
                   <Table stickyHeader sx={{ width: "100%" }}>
                     <TableHead sx={{ "& th": { backgroundColor: "#f1f5f9" } }}>
                       <TableRow>
@@ -511,6 +714,9 @@ function OnboardPopup() {
                         <TableCell align="center" className="w-[36%]">
                           Brand
                         </TableCell>
+                        {/* <TableCell align="center" className="w-[36%]">
+                          {"Actual Area (in sq.ft)"}
+                        </TableCell> */}
                         <TableCell align="center" className="w-[32.5%]">
                           Actions
                         </TableCell>
@@ -557,8 +763,40 @@ function OnboardPopup() {
                               </Select>
                             </FormControl>
                           </TableCell>
+                          {/* <TableCell align="center">
+                            <FormControl
+                              size="small"
+                              sx={{
+                                width: "106px",
+                              }}
+                              fullWidth
+                            >
+                              <input
+                              type="number"
+                              className="w-full h-10 outline-none focus:border-blue-500 focus:border-2 text-center border rounded border-gray-400"
+                            />
+                            </FormControl>
+                          </TableCell> */}
                           <TableCell align="center">
                             <div className="flex justify-center space-x-3">
+                              <Tooltip title={box.id === annotatingBayId ? "Done" : "Annotate"}>
+                                <IconButton
+                                  onClick={(e) => handleAnnotateBay(e, box.id)}
+                                >
+                                  { annotatingBayId === box.id ? <FaCheck color="#10b981"/> : <FaDrawPolygon /> }
+                                </IconButton>
+                              </Tooltip>
+                              { box.id===annotatingBayId && drawingData.length!==0 ? 
+                              <Tooltip title={"Undo"}>
+                                <IconButton
+                                    onClick={(e) => handleUndoDrawing(e)}
+                                  >
+                                    <GrUndo />
+                                  </IconButton>
+                              </Tooltip>
+                              :
+                              null
+                              }
                               <Tooltip title={"Configuration"}>
                                 <IconButton
                                   onClick={(e) => openConfigsMenu(e, box)}
