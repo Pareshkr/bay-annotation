@@ -66,6 +66,7 @@ function OnboardPopup() {
   // const [predBoxes, setPredBoxes] = useState([]);
   const [boxProps, setBoxProps] = useState([]); // Stores the data to print the annotations
   const [scaledBoxProps, setScaledBoxProps] = useState([]); // Stores the annotation data to be sent through the API call
+  const [scaledSavedPolygons, setScaledSavedPolygons] = useState([]) // Stores the saved polygons data to be sent through the API call
   // eslint-disable-next-line
   const [hoveredBoxId, setHoveredBoxId] = useState(null); // Stores the ID of the Hovered bay
   const [popoverData, setPopoverData] = useState({});
@@ -79,6 +80,8 @@ function OnboardPopup() {
 
   const [annotating, setAnnotating] = useState(false); // True when anotation button is pressed, indicates anotation is active within a bay
   const [annotatingBayId, setAnnotatingBayId] = useState(null); // Stores currently active bay's ID for anotation
+
+  const ACTUAL_FLOOR_AREA = 1500 // sq.ft
 
   //! UseRefs
   const imageRef = useRef(null);
@@ -96,7 +99,8 @@ function OnboardPopup() {
 
   // Save button click function
   const handleClickSave = () => {
-    console.log("Clicked Save", scaledBoxProps);
+    console.log("saved scaled bays", scaledBoxProps);
+    console.log("saved scaled Polygons", scaledSavedPolygons);
   };
 
   // open configs menu
@@ -122,17 +126,16 @@ function OnboardPopup() {
       const newBoxProps = [...boxProps];
       const newScaledBoxProps = [...scaledBoxProps];
       // newRectangles.pop(); // Remove the last object
-      newBoxProps.pop(); // Remove the last object
+      const lastBox = newBoxProps.pop(); // Remove the last object
       newScaledBoxProps.pop(); // Remove the last object
       // setRectangles(newRectangles);
       setBoxProps(newBoxProps);
       setScaledBoxProps(newScaledBoxProps);
       // setBayId(bayId - 1);
-
-      // setStartPoint(null)
-      // setDrawingData([])
-      // setSavedPolygons([])
-      // setAnnotating(false)
+      const updatedSavedPolygons = savedPolygons.filter((polygon) => polygon.bayId !== lastBox.id);// remove the corresponding polygon
+      const updatedScaledSavedPolygons = scaledSavedPolygons.filter((polygon) => polygon.bayId !== lastBox.id);  // remove the corresponding polygon
+      setSavedPolygons(updatedSavedPolygons);
+      setScaledSavedPolygons(updatedScaledSavedPolygons);
       handleDone()
     }
   };
@@ -140,11 +143,12 @@ function OnboardPopup() {
   // delete a plotted bay
   const handleDelete = (id) => {
     const updatedBoxProps = boxProps.filter((box) => box.id !== id);
+    const updatedSavedPolygons = savedPolygons.filter((polygon) => polygon.bayId !== id);
     // setBayId(id - 1);
     setBoxProps(updatedBoxProps);
+    setSavedPolygons(updatedSavedPolygons);
     setStartPoint(null)
     setDrawingData([])
-    // setSavedPolygons([])
     setAnnotating(false)
     setAnnotatingBayId(null)
   };
@@ -288,11 +292,6 @@ function OnboardPopup() {
     setPlottedDimensions({ width: width, height: height });
     setImgOffset({ x: left, y: top });
   };
-  // console.log("imgSize ", imgSize)
-  // console.log("realDimension ", realDimension)
-  // console.log("plottedDimensions ", plottedDimensions)
-  // console.log("imgOffset ", imgOffset)
-  // console.log("boxProps ", boxProps)
 
   //? Annotation with mouse click functions
   const handleMouseDown = (event) => {
@@ -398,7 +397,32 @@ function OnboardPopup() {
     // eslint-disable-next-line
   }, [boxProps]);
 
+  // Polygon Scaling
+  useEffect(() => {
+    const transormedPolyons = savedPolygons.map(({polygonData, ...polygon}) => {
+      return {
+        ...polygon,
+        polygonData: transformArray([polygonData])[0],
+      }
+    })
 
+    setScaledSavedPolygons(
+      transormedPolyons.map(({polygonData, ...transormedPolyon}) => {
+        const scaling_X = realDimension.width / plottedDimensions.width
+        const scaling_Y = realDimension.height / plottedDimensions.height
+        return {
+          ...transormedPolyon,
+          polygonData: polygonData.map((coord) => {
+            return {
+              x: (coord.x - Math.floor(imgOffset.x)) * scaling_X,
+              y: (coord.y - Math.floor(imgOffset.y)) * scaling_Y
+            }
+          })
+        }
+      })
+    )
+  }, [savedPolygons])
+  
   // Image annotation
   
   const handleAnnotateBay = (event, id) => {
@@ -418,12 +442,16 @@ function OnboardPopup() {
       const polygonWithAnnotatingBayId = savedPolygons.filter(polygon => polygon.bayId === annotatingBayId);
       if(polygonWithAnnotatingBayId.length !== 0) {
         setStartPoint(polygonWithAnnotatingBayId[0].startPoint);
-        setDrawingData(polygonWithAnnotatingBayId[0].polygonData);
+        setDrawingData(polygonWithAnnotatingBayId[0].polygonData.slice(0, -1));
         const updatedSavedPolygons = savedPolygons.filter(polygon => polygon.bayId !== annotatingBayId);
         setSavedPolygons(updatedSavedPolygons)
       }
     } 
   }, [annotatingBayId])
+
+  const transformArray = (inputArray) => {
+    return inputArray.map((subArray) => subArray.map(({ start }) => start));
+  };
 
   const handleMouseDownOnBay = (e, bayId) => {
     if (drawing || !annotating || (bayId!==annotatingBayId)) {
@@ -443,7 +471,6 @@ function OnboardPopup() {
       // Set startPoint if it doesn't exist
       setStartPoint({ x: offsetX, y: offsetY });
     }
-    console.log("drawingData ", drawingData)
   };
 
   const calculateHighlightPoints = () => {
@@ -488,10 +515,13 @@ function OnboardPopup() {
           end: drawingData[0].start,
         },
       ];
+      const plottedArea = calculateAreaOfPolygon(...transformArray([completedPolygon]))
       const polygon = {
         bayId: bayId,
         polygonData: completedPolygon,
-        startPoint: startPoint
+        startPoint: startPoint,      // Todo: set startPoint to end point of completed polygon
+        area: plottedArea,   // area in terms of pixels
+        actualArea: (ACTUAL_FLOOR_AREA/(plottedDimensions.width*plottedDimensions.height))*plottedArea
       }
       // Save the drawn polygon to the list of saved polygons
       setSavedPolygons((prevPolygons) => [...prevPolygons, polygon]);
@@ -503,11 +533,20 @@ function OnboardPopup() {
 
   };
 
-  // console.log("boxProps ", boxProps)
-  // console.log("savedPolygons ", savedPolygons)
+  const calculateAreaOfPolygon = (vertices) => {       // accepts an array of objects representing vertices with coordinates of its vertices
+    const n = vertices.length;
+    const area = vertices.reduce((acc, vertex, index) => {
+      const nextIndex = (index + 1) % n;
+      const { x: x1, y: y1 } = vertex;
+      const { x: x2, y: y2 } = vertices[nextIndex];
+      return acc + (x1 * y2 - x2 * y1);   // shoelace formula
+    }, 0);
+    return Math.abs(area) / 2;
+  }
+
   return (
     <>
-      {/*Map button*/}
+      {/* Map button */}
       <button className="text-3xl text-emerald-500" onClick={handlePopupToggle}>
         <FaMapMarkedAlt />
       </button>
@@ -714,12 +753,12 @@ function OnboardPopup() {
                         <TableCell align="center" className="w-[36%]">
                           Brand
                         </TableCell>
-                        {/* <TableCell align="center" className="w-[36%]">
-                          {"Actual Area (in sq.ft)"}
-                        </TableCell> */}
-                        <TableCell align="center" className="w-[32.5%]">
+                        {savedPolygons.length!==0 && <TableCell align="center" className="w-[36%]">
+                          {"Annotation area (in sq.ft)"}
+                        </TableCell>}
+                        {<TableCell align="center" className="w-[32.5%]">
                           Actions
-                        </TableCell>
+                        </TableCell>}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -763,20 +802,11 @@ function OnboardPopup() {
                               </Select>
                             </FormControl>
                           </TableCell>
-                          {/* <TableCell align="center">
-                            <FormControl
-                              size="small"
-                              sx={{
-                                width: "106px",
-                              }}
-                              fullWidth
-                            >
-                              <input
-                              type="number"
-                              className="w-full h-10 outline-none focus:border-blue-500 focus:border-2 text-center border rounded border-gray-400"
-                            />
-                            </FormControl>
-                          </TableCell> */}
+                          { savedPolygons.length !== 0 && 
+                            <TableCell align="center">
+                              {savedPolygons.find((polygon) => polygon.bayId === box.id)?.actualArea.toFixed(2) || '_'}
+                            </TableCell>
+                          }
                           <TableCell align="center">
                             <div className="flex justify-center space-x-3">
                               <Tooltip title={box.id === annotatingBayId ? "Done" : "Annotate"}>
