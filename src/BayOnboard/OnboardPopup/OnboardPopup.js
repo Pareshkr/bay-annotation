@@ -81,7 +81,7 @@ function OnboardPopup() {
   const [annotating, setAnnotating] = useState(false); // True when anotation button is pressed, indicates anotation is active within a bay
   const [annotatingBayId, setAnnotatingBayId] = useState(null); // Stores currently active bay's ID for anotation
 
-  const ACTUAL_FLOOR_AREA = 1500 // sq.ft
+  const ACTUAL_BLUSHLACE_AREA = 1500 // sq.ft
 
   //! UseRefs
   const imageRef = useRef(null);
@@ -99,6 +99,9 @@ function OnboardPopup() {
 
   // Save button click function
   const handleClickSave = () => {
+    // console.log("boxProps ", boxProps);
+    // console.log("savedPolygons ", savedPolygons);
+    // console.log("transformed savedPolygons", transformArray(savedPolygons.map((polygon) => polygon.polygonData)))
     console.log("saved scaled bays", scaledBoxProps);
     console.log("saved scaled Polygons", scaledSavedPolygons);
   };
@@ -295,10 +298,11 @@ function OnboardPopup() {
 
   //? Annotation with mouse click functions
   const handleMouseDown = (event) => {
-    if(annotating) {
+    event.preventDefault();
+    if(annotating || markingSection) {
       return
     }
-    event.preventDefault();
+    // Drawing bay
     setDrawing(true);
     const x = event.clientX;
     const y = event.clientY;
@@ -486,6 +490,7 @@ function OnboardPopup() {
 
     return points;
   };
+  // console.log(drawingData)
 
   const handleUndoDrawing = () => {
     if (drawingData.length > 0) {
@@ -521,7 +526,7 @@ function OnboardPopup() {
         polygonData: completedPolygon,
         startPoint: startPoint,      // Todo: set startPoint to end point of completed polygon
         area: plottedArea,   // area in terms of pixels
-        actualArea: (ACTUAL_FLOOR_AREA/(plottedDimensions.width*plottedDimensions.height))*plottedArea
+        actualArea: (ACTUAL_BLUSHLACE_AREA/(plottedDimensions.width*plottedDimensions.height))*plottedArea
       }
       // Save the drawn polygon to the list of saved polygons
       setSavedPolygons((prevPolygons) => [...prevPolygons, polygon]);
@@ -543,6 +548,117 @@ function OnboardPopup() {
     }, 0);
     return Math.abs(area) / 2;
   }
+
+  // Marking section
+  const [markingSection, setMarkingSection] = useState(false);
+  const [sectionProps, setSectionProps] = useState({});
+  const [showGrid, setShowGrid] = useState(false);
+
+  const handleMouseDownOnImg = (event) => {
+    setDrawing(false)
+    if(markingSection) {
+      const x = event.clientX;
+      const y = event.clientY;
+      if (startPoint) {
+        // Draw line if startPoint exists
+        setDrawingData((prevData) => [
+          ...prevData,
+          { start: startPoint, end: { x: x, y: y } },
+        ]);
+        setStartPoint({ x: x, y: y });
+      } else {
+        // Set startPoint if it doesn't exist
+        setStartPoint({ x: x, y: y });
+      }
+      return
+    }
+
+  }
+
+  const handleClickMarkSection = (event) => {
+    if(!markingSection){
+      setMarkingSection(true);
+    } else {
+      if (drawingData.length > 0) {
+        // Include the last dot when clicking "Done"
+        const completedPolygon = [
+          ...drawingData,
+          {
+            start: drawingData[drawingData.length - 1].end,
+            end: drawingData[0].start,
+          },
+        ];
+        const plottedArea = calculateAreaOfPolygon(...transformArray([completedPolygon]))
+        const section = {
+          sectionData: completedPolygon,
+          startPoint: startPoint,      // Todo: set startPoint to end point of completed polygon
+          plottedArea: plottedArea,   // area in terms of pixels
+          actualArea: ACTUAL_BLUSHLACE_AREA
+        }
+        setSectionProps(section)
+      }
+      setShowGrid(true);
+      setDrawingData([]);
+      setStartPoint(null);
+      setMarkingSection(false);
+      console.log("sectionProps", sectionProps)
+    }
+  }
+  
+// Adding Grid in marked section
+const cellSize = 40; // Adjust the grid cell size as needed
+const [polygonPoints, setPolygonPoints] = useState("");
+const [lines, setLines] = useState([]);
+const [minX, setMinX] = useState(Number.MAX_VALUE);
+const [maxX, setMaxX] = useState(Number.MIN_VALUE);
+const [minY, setMinY] = useState(Number.MAX_VALUE);
+const [maxY, setMaxY] = useState(Number.MIN_VALUE);
+
+useEffect(() => {
+  if (Object.keys(sectionProps).length !== 0) {
+    sectionProps.sectionData.forEach(({ start }) => {
+      setMinX((prevMinX) => Math.min(prevMinX, start.x));
+      setMaxX((prevMaxX) => Math.max(prevMaxX, start.x));
+      setMinY((prevMinY) => Math.min(prevMinY, start.y));
+      setMaxY((prevMaxY) => Math.max(prevMaxY, start.y));
+    });
+
+    setPolygonPoints(sectionProps.sectionData.map(({ start }) => `${start.x},${start.y}`).join(" "));
+  }
+}, [sectionProps]);
+
+useEffect(() => {
+  setLines([]);
+  for (let x = minX; x <= maxX; x += cellSize) {
+    setLines((prevLines) => [
+      ...prevLines,
+      <line
+        key={`vertical-line-${x}`}
+        x1={x}
+        y1={minY}
+        x2={x}
+        y2={maxY}
+        stroke="yellow"
+        strokeWidth="0.5"
+      />
+    ]);
+  }
+
+  for (let y = minY; y <= maxY; y += cellSize) {
+    setLines((prevLines) => [
+      ...prevLines,
+      <line
+        key={`horizontal-line-${y}`}
+        x1={minX}
+        y1={y}
+        x2={maxX}
+        y2={y}
+        stroke="yellow"
+        strokeWidth="0.5"
+      />
+    ]);
+  }
+}, [minX, maxX, minY, maxY, cellSize]);
 
   return (
     <>
@@ -585,6 +701,11 @@ function OnboardPopup() {
                 </span>
               </div>
               <div className="flex flex-col-reverse lg:flex-row gap-2">
+                <DynamicButton
+                  title={markingSection?"Done":"Marksection"}
+                  onClick={handleClickMarkSection}
+                  toolTip="Mark"
+                />
                 <DynamicButton
                   title="Clear"
                   icon={MdOutlineCleaningServices}
@@ -633,7 +754,93 @@ function OnboardPopup() {
                     src={floorLayout}
                     alt="img not found"
                     className="max-h-[86vh]"
+                    onMouseDown={handleMouseDownOnImg}
                   />
+                  
+                  {markingSection && drawingData.map((line, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        position: "absolute",
+                        top: line.start.y,
+                        left: line.start.x,
+                        width: Math.sqrt(
+                          Math.pow(line.end.x - line.start.x, 2) +
+                          Math.pow(line.end.y - line.start.y, 2)
+                        ),
+                        height: 2,
+                        backgroundColor: "red",
+                        transform: `rotate(${Math.atan2(
+                          line.end.y - line.start.y,
+                          line.end.x - line.start.x
+                        )}rad)`,
+                        transformOrigin: "0 0",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  ))}
+                  {markingSection && startPoint && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: startPoint.y - 2,
+                        left: startPoint.x - 2,
+                        width: 4,
+                        height: 4,
+                        backgroundColor: "red",
+                        borderRadius: "50%",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  )}
+                  <svg
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      pointerEvents: "none",
+                    }}
+                    width="100%"
+                    height="100%"
+                  >
+                    {/* {Object.keys(sectionProps).length > 0 &&
+                      <polygon
+                        fill="rgba(0, 0, 25, 0.2)"
+                        points={sectionProps.sectionData
+                          .flatMap((point) => [point.start.x, point.start.y])
+                          .join(" ")}
+                      />
+                    } */}
+                    <polygon
+                      fill="rgba(0, 255, 0, 0.3)"
+                      points={calculateHighlightPoints().flat().join(" ")}
+                    />
+                    {showGrid && (
+                      <svg
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          pointerEvents: "none",
+                          width: "100%",
+                          height: "100%",
+                        }}
+                      >
+                        <g>
+                          <defs>
+                            <clipPath id={`clip-path`}>
+                              <polygon fill="rgba(250, 125, 50, 0.3)" points={polygonPoints} />
+                            </clipPath>
+                          </defs>
+                          <g clipPath={`url(#clip-path`}>
+                            {lines}
+                          </g>
+                        </g>                      
+                    </svg>
+                  )}
+                  </svg>
+
+                  {/* Bays */}
                   {boxProps.map((box) => (
                     <div
                       key={box.id}
@@ -670,7 +877,7 @@ function OnboardPopup() {
                   )}
 
                   {/*bay annotation */}
-                  {drawingData.map((line, index) => (
+                  {!markingSection && drawingData.map((line, index) => (
                     <div
                       key={index}
                       style={{
@@ -692,7 +899,7 @@ function OnboardPopup() {
                       }}
                     />
                   ))}
-                  {startPoint && (
+                  {!markingSection && startPoint && (
                     <div
                       style={{
                         position: "absolute",
@@ -706,7 +913,7 @@ function OnboardPopup() {
                       }}
                     />
                   )}
-                  <svg
+                  {!markingSection && <svg
                     style={{
                       position: "absolute",
                       top: 0,
@@ -730,7 +937,7 @@ function OnboardPopup() {
                       fill="rgba(0, 255, 0, 0.3)"
                       points={calculateHighlightPoints().flat().join(" ")}
                     />
-                  </svg>
+                  </svg>}
                 </div>
               </div>
               {/*Table Content*/}
