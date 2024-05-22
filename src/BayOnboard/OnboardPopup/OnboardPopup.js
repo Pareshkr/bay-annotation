@@ -37,7 +37,7 @@ import { FaCheck } from "react-icons/fa6";
 import DynamicButton from "../components/DynamicButton";
 
 // assets
-import floorLayout from "../../assets/orionfloor.jpg";
+import floorLayout from "../../assets/orionfloor2.jpg";
 // import floorLayout from "../../assets/floor_layout.png";
 
 // options
@@ -52,10 +52,12 @@ function OnboardPopup() {
   const [realDimension, setRealDimension] = useState({
     width: 0,
     height: 0,
+    sectionArea: 0,
   }); // Real Image Dimensions
   const [plottedDimensions, setPlottedDimensions] = useState({
     width: 0,
     height: 0,
+    sectionArea: 0,
   }); // Plotted Image Dimensions
   const [drawing, setDrawing] = useState(false); // Mouse left button is pressed
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 }); // To Set the size of the Img parent div
@@ -81,7 +83,7 @@ function OnboardPopup() {
   const [annotating, setAnnotating] = useState(false); // True when anotation button is pressed, indicates anotation is active within a bay
   const [annotatingBayId, setAnnotatingBayId] = useState(null); // Stores currently active bay's ID for anotation
 
-  const ACTUAL_BLUSHLACE_AREA = 1500 // sq.ft
+  const ACTUAL_BLUSHLACE_AREA = 1536 // sq.ft
 
   //! UseRefs
   const imageRef = useRef(null);
@@ -99,8 +101,8 @@ function OnboardPopup() {
 
   // Save button click function
   const handleClickSave = () => {
-    // console.log("boxProps ", boxProps);
-    // console.log("savedPolygons ", savedPolygons);
+    console.log("boxProps ", boxProps);
+    console.log("savedPolygons ", savedPolygons);
     // console.log("transformed savedPolygons", transformArray(savedPolygons.map((polygon) => polygon.polygonData)))
     console.log("saved scaled bays", scaledBoxProps);
     console.log("saved scaled Polygons", scaledSavedPolygons);
@@ -172,7 +174,6 @@ function OnboardPopup() {
     updatedBoxProps[index][field] = value;
     setBoxProps(updatedBoxProps);
   };
-
   // change brand wrt bay
 
   const handleBrandChange = (id, newBrand) => {
@@ -299,6 +300,10 @@ function OnboardPopup() {
   //? Annotation with mouse click functions
   const handleMouseDown = (event) => {
     event.preventDefault();
+    if(Object.keys(sectionProps).length === 0 && !markingSection){
+      alert("Mark the section before drawing bays")
+      return
+    }
     if(annotating || markingSection) {
       return
     }
@@ -526,7 +531,7 @@ function OnboardPopup() {
         polygonData: completedPolygon,
         startPoint: startPoint,      // Todo: set startPoint to end point of completed polygon
         area: plottedArea,   // area in terms of pixels
-        actualArea: (ACTUAL_BLUSHLACE_AREA/(plottedDimensions.width*plottedDimensions.height))*plottedArea
+        actualArea: (ACTUAL_BLUSHLACE_AREA/(plottedDimensions.sectionArea))*plottedArea
       }
       // Save the drawn polygon to the list of saved polygons
       setSavedPolygons((prevPolygons) => [...prevPolygons, polygon]);
@@ -601,12 +606,11 @@ function OnboardPopup() {
       setDrawingData([]);
       setStartPoint(null);
       setMarkingSection(false);
-      console.log("sectionProps", sectionProps)
     }
   }
   
 // Adding Grid in marked section
-const cellSize = 40; // Adjust the grid cell size as needed
+const cellSize = 20; // Adjust the grid cell size as needed
 const [polygonPoints, setPolygonPoints] = useState("");
 const [lines, setLines] = useState([]);
 const [minX, setMinX] = useState(Number.MAX_VALUE);
@@ -625,6 +629,11 @@ useEffect(() => {
 
     setPolygonPoints(sectionProps.sectionData.map(({ start }) => `${start.x},${start.y}`).join(" "));
   }
+  setPlottedDimensions(prevState => ({...prevState, sectionArea: sectionProps.plottedArea}))
+  setRealDimension(prevState => ({
+    ...prevState, 
+    sectionArea: ((realDimension.height*realDimension.width)/(plottedDimensions.height*plottedDimensions.width))*sectionProps.plottedArea
+  }))
 }, [sectionProps]);
 
 useEffect(() => {
@@ -638,8 +647,8 @@ useEffect(() => {
         y1={minY}
         x2={x}
         y2={maxY}
-        stroke="yellow"
-        strokeWidth="0.5"
+        stroke="red"
+        strokeWidth="0.8"
       />
     ]);
   }
@@ -653,12 +662,13 @@ useEffect(() => {
         y1={y}
         x2={maxX}
         y2={y}
-        stroke="yellow"
-        strokeWidth="0.5"
+        stroke="red"
+        strokeWidth="0.8"
       />
     ]);
   }
 }, [minX, maxX, minY, maxY, cellSize]);
+console.log("sectionProps ", sectionProps)
 
   return (
     <>
@@ -702,7 +712,7 @@ useEffect(() => {
               </div>
               <div className="flex flex-col-reverse lg:flex-row gap-2">
                 <DynamicButton
-                  title={markingSection?"Done":"Marksection"}
+                  title={markingSection?"Done":"MarkSection"}
                   onClick={handleClickMarkSection}
                   toolTip="Mark"
                 />
@@ -755,6 +765,7 @@ useEffect(() => {
                     alt="img not found"
                     className="max-h-[86vh]"
                     onMouseDown={handleMouseDownOnImg}
+                    style={{opacity: "0.8"}}
                   />
                   
                   {markingSection && drawingData.map((line, index) => (
@@ -844,7 +855,7 @@ useEffect(() => {
                   {boxProps.map((box) => (
                     <div
                       key={box.id}
-                      className={`absolute border-2 border-${box.id === annotatingBayId?"green-500":"white"} cursor-${annotatingBayId === box.id ? "pointer":"not-allowed"} ${hoveredBoxId === box.id
+                      className={`absolute border-2 border-${box.id === annotatingBayId?"green-500":"black"} cursor-${annotatingBayId === box.id ? "pointer":"not-allowed"} ${hoveredBoxId === box.id
                         ? "border-lime-500 bg-lime-500 bg-opacity-[.3]"
                         : ""
                         }`}
@@ -856,10 +867,10 @@ useEffect(() => {
                       }}
                       onMouseDown={(e) => handleMouseDownOnBay(e, box.id)}
                     >
-                      <span className="relative text-white -top-6 left-1">
+                      <span className="relative text-black -top-6 left-1">
                         Bay {box.id}
                       </span>
-                      <div className="absolute text-white -bottom-6 left-1">
+                      <div className="absolute text-black -bottom-6 left-1">
                         {box.brand}
                       </div>
                     </div>
@@ -975,7 +986,7 @@ useEffect(() => {
                             <input
                               type="number"
                               value={box.id}
-                              onChange={(e) =>
+                              onChange={(e) => 
                                 handleInputChange(
                                   index,
                                   "id",
