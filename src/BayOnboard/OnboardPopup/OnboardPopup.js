@@ -37,7 +37,7 @@ import { FaCheck } from "react-icons/fa6";
 import DynamicButton from "../components/DynamicButton";
 
 // assets
-import floorLayout from "../../assets/orionfloor2.jpg";
+import floorLayout from "../../assets/blushlace_layout.jpg";
 // import floorLayout from "../../assets/floor_layout.png";
 
 // options
@@ -159,21 +159,69 @@ function OnboardPopup() {
   };
 
   // change bay no.
-  const handleInputChange = (index, field, value) => {
-    if (field === "id") {
-      const isDuplicate = boxProps.some(
-        (box, i) => i !== index && box.id === value
-      );
+  // const handleInputChange = (index, field, value) => {
+  //   if (field === "id") {
+  //     const isDuplicate = boxProps.some(
+  //       (box, i) => i !== index && box.id === value
+  //     );
 
-      if (isDuplicate) {
-        alert("Two bays can't have same numbers");
-        return;
-      }
+  //     if (isDuplicate) {
+  //       alert("Two bays can't have same numbers");
+  //       return;
+  //     }
+  //   }
+  //   // const updatingId = boxProps[index].id
+  //   const updatedBoxProps = [...boxProps];
+  //   updatedBoxProps[index][field] = value;
+  //   setBoxProps(updatedBoxProps);
+  //   // if(!Number.isNaN(value)) {
+  //   //   console.log(updatingId)
+  //   //   setSavedPolygons(prevData => 
+  //   //     prevData.map((polygon) =>
+  //   //       polygon.bayId === updatingId ? { ...polygon, bayId: value } : polygon
+  //   //     )
+  //   //   )
+  //   // }
+  // };
+  const handleInputChange = (index, field, value) => {
+    if (value === "") {
+      console.log("Empty value detected, no update performed.");
+      return;
     }
+  
+    const newValue = parseInt(value, 10);
+  
+    if (Number.isNaN(newValue)) {
+      console.error("Invalid value or zero value:", value);
+      return;
+    }
+  
+    const currentId = boxProps[index].id;
+    console.log("Current ID:", currentId);
+  
+    // Create a copy of boxProps to test the new value
     const updatedBoxProps = [...boxProps];
-    updatedBoxProps[index][field] = value;
+    updatedBoxProps[index] = { ...updatedBoxProps[index], [field]: newValue };
+  
+    const isDuplicate = updatedBoxProps.some(
+      (box, i) => i !== index && box.id === newValue
+    );
+  
+    if (isDuplicate) {
+      alert("Two bays can't have the same numbers");
+      return;
+    }
+  
+    // If no duplicates, proceed to update the state
     setBoxProps(updatedBoxProps);
+  
+    setSavedPolygons(prevData =>
+      prevData.map(polygon =>
+        polygon.bayId === currentId ? { ...polygon, bayId: newValue } : polygon
+      )
+    );
   };
+
   // change brand wrt bay
 
   const handleBrandChange = (id, newBrand) => {
@@ -608,9 +656,15 @@ function OnboardPopup() {
       setMarkingSection(false);
     }
   }
+  // console.log("sectionProps", sectionProps)
+  // console.log("realDimension ", realDimension)
+  // console.log("plottedDimensions ", plottedDimensions)
   
 // Adding Grid in marked section
-const cellSize = 20; // Adjust the grid cell size as needed
+
+const realGridArea = 2; // sq.ft
+const cellSize = Math.round(Math.sqrt(realGridArea*(sectionProps.plottedArea/sectionProps.actualArea))); // Adjust the grid cell size as needed
+const totalGrids = Math.ceil(sectionProps.actualArea/realGridArea);
 const [polygonPoints, setPolygonPoints] = useState("");
 const [lines, setLines] = useState([]);
 const [minX, setMinX] = useState(Number.MAX_VALUE);
@@ -668,7 +722,6 @@ useEffect(() => {
     ]);
   }
 }, [minX, maxX, minY, maxY, cellSize]);
-console.log("sectionProps ", sectionProps)
 
   return (
     <>
@@ -986,13 +1039,10 @@ console.log("sectionProps ", sectionProps)
                             <input
                               type="number"
                               value={box.id}
-                              onChange={(e) => 
-                                handleInputChange(
-                                  index,
-                                  "id",
-                                  parseInt(e.target.value)
-                                )
-                              }
+                              onChange={(e) => {
+                                const newBayId = e.target.value; // Get the value directly as a string
+                                handleInputChange(index, "id", newBayId);
+                              }}
                               className="w-12 h-10 outline-none focus:border-blue-500 focus:border-2 text-center border rounded border-gray-400"
                             />
                           </TableCell>
