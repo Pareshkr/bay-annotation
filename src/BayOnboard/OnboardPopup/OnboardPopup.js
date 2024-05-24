@@ -30,12 +30,14 @@ import { MdOutlineCleaningServices } from "react-icons/md";
 import { BsDot } from "react-icons/bs";
 import { IoSettingsSharp } from "react-icons/io5";
 import { AiOutlineExclamationCircle } from "react-icons/ai";
+import { FaDrawPolygon } from "react-icons/fa6";
+import { FaCheck } from "react-icons/fa6";
 
 // project imports
 import DynamicButton from "../components/DynamicButton";
 
 // assets
-import floorLayout from "../../assets/orionfloor.jpg";
+import floorLayout from "../../assets/blushlace_layout.jpg";
 // import floorLayout from "../../assets/floor_layout.png";
 
 // options
@@ -50,10 +52,12 @@ function OnboardPopup() {
   const [realDimension, setRealDimension] = useState({
     width: 0,
     height: 0,
+    sectionArea: 0,
   }); // Real Image Dimensions
   const [plottedDimensions, setPlottedDimensions] = useState({
     width: 0,
     height: 0,
+    sectionArea: 0,
   }); // Plotted Image Dimensions
   const [drawing, setDrawing] = useState(false); // Mouse left button is pressed
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 }); // To Set the size of the Img parent div
@@ -64,12 +68,22 @@ function OnboardPopup() {
   // const [predBoxes, setPredBoxes] = useState([]);
   const [boxProps, setBoxProps] = useState([]); // Stores the data to print the annotations
   const [scaledBoxProps, setScaledBoxProps] = useState([]); // Stores the annotation data to be sent through the API call
+  const [scaledSavedPolygons, setScaledSavedPolygons] = useState([]) // Stores the saved polygons data to be sent through the API call
   // eslint-disable-next-line
   const [hoveredBoxId, setHoveredBoxId] = useState(null); // Stores the ID of the Hovered bay
   const [popoverData, setPopoverData] = useState({});
   const [isAscendingOrder, setIsAscendingOrder] = useState(null);
   const [requiredSort, setRequiredSort] = useState(false);
   // const [popupId, setPopupId] = useState(null);
+
+  const [drawingData, setDrawingData] = useState([]); // stores drawing points for currently active bays anotation
+  const [startPoint, setStartPoint] = useState(null); // anotation starts from this point
+  const [savedPolygons, setSavedPolygons] = useState([]); // stores all anotated polygons data
+
+  const [annotating, setAnnotating] = useState(false); // True when anotation button is pressed, indicates anotation is active within a bay
+  const [annotatingBayId, setAnnotatingBayId] = useState(null); // Stores currently active bay's ID for anotation
+
+  const ACTUAL_BLUSHLACE_AREA = 1536 // sq.ft
 
   //! UseRefs
   const imageRef = useRef(null);
@@ -87,7 +101,23 @@ function OnboardPopup() {
 
   // Save button click function
   const handleClickSave = () => {
-    console.log("Clicked Save", scaledBoxProps);
+    const updatedScaledBoxProps = scaledBoxProps.map(box => {     // to be sent through API call
+      // Find the corresponding polygon from scaledSavedPolygons array
+      const matchingPolygon = scaledSavedPolygons.find(polygon => polygon.bayId === box.id);
+      // If a matching polygon is found, add it to the box object
+      if (matchingPolygon) {
+          return {
+              ...box,
+              polygon: matchingPolygon
+          };
+      } else {
+          // If no matching polygon is found, return the box object as it is
+          return box;
+      }
+    });
+    console.log("scaled boxProps", scaledBoxProps);
+    console.log("scaled savedPolygons", scaledSavedPolygons);
+    console.log("updated boxProps ", updatedScaledBoxProps);
   };
 
   // open configs menu
@@ -113,37 +143,93 @@ function OnboardPopup() {
       const newBoxProps = [...boxProps];
       const newScaledBoxProps = [...scaledBoxProps];
       // newRectangles.pop(); // Remove the last object
-      newBoxProps.pop(); // Remove the last object
+      const lastBox = newBoxProps.pop(); // Remove the last object
       newScaledBoxProps.pop(); // Remove the last object
       // setRectangles(newRectangles);
       setBoxProps(newBoxProps);
       setScaledBoxProps(newScaledBoxProps);
       // setBayId(bayId - 1);
+      const updatedSavedPolygons = savedPolygons.filter((polygon) => polygon.bayId !== lastBox.id);// remove the corresponding polygon
+      const updatedScaledSavedPolygons = scaledSavedPolygons.filter((polygon) => polygon.bayId !== lastBox.id);  // remove the corresponding polygon
+      setSavedPolygons(updatedSavedPolygons);
+      setScaledSavedPolygons(updatedScaledSavedPolygons);
+      handleDone()
     }
   };
 
   // delete a plotted bay
   const handleDelete = (id) => {
     const updatedBoxProps = boxProps.filter((box) => box.id !== id);
+    const updatedSavedPolygons = savedPolygons.filter((polygon) => polygon.bayId !== id);
     // setBayId(id - 1);
     setBoxProps(updatedBoxProps);
+    setSavedPolygons(updatedSavedPolygons);
+    setStartPoint(null)
+    setDrawingData([])
+    setAnnotating(false)
+    setAnnotatingBayId(null)
   };
 
   // change bay no.
-  const handleInputChange = (index, field, value) => {
-    if (field === "id") {
-      const isDuplicate = boxProps.some(
-        (box, i) => i !== index && box.id === value
-      );
+  // const handleInputChange = (index, field, value) => {
+  //   if (field === "id") {
+  //     const isDuplicate = boxProps.some(
+  //       (box, i) => i !== index && box.id === value
+  //     );
 
-      if (isDuplicate) {
-        alert("Two bays can't have same numbers");
-        return;
-      }
+  //     if (isDuplicate) {
+  //       alert("Two bays can't have same numbers");
+  //       return;
+  //     }
+  //   }
+  //   // const updatingId = boxProps[index].id
+  //   const updatedBoxProps = [...boxProps];
+  //   updatedBoxProps[index][field] = value;
+  //   setBoxProps(updatedBoxProps);
+  //   // if(!Number.isNaN(value)) {
+  //   //   console.log(updatingId)
+  //   //   setSavedPolygons(prevData => 
+  //   //     prevData.map((polygon) =>
+  //   //       polygon.bayId === updatingId ? { ...polygon, bayId: value } : polygon
+  //   //     )
+  //   //   )
+  //   // }
+  // };
+  const handleInputChange = (index, field, value) => {
+    if (value === "") {
+      alert("Empty value detected, no update performed.");
+      return;
     }
+  
+    const newValue = parseInt(value, 10);
+  
+    if (Number.isNaN(newValue)) {
+      console.error("Invalid value or zero value:", value);
+      return;
+    }
+  
+    const currentId = boxProps[index].id;  
+    // Create a copy of boxProps to test the new value
     const updatedBoxProps = [...boxProps];
-    updatedBoxProps[index][field] = value;
+    updatedBoxProps[index] = { ...updatedBoxProps[index], [field]: newValue };
+  
+    const isDuplicate = updatedBoxProps.some(
+      (box, i) => i !== index && box.id === newValue
+    );
+  
+    if (isDuplicate) {
+      alert("Two bays can't have the same numbers");
+      return;
+    }
+  
+    // If no duplicates, proceed to update the state
     setBoxProps(updatedBoxProps);
+  
+    setSavedPolygons(prevData =>
+      prevData.map(polygon =>
+        polygon.bayId === currentId ? { ...polygon, bayId: newValue } : polygon
+      )
+    );
   };
 
   // change brand wrt bay
@@ -187,6 +273,11 @@ function OnboardPopup() {
   const handleClear = () => {
     setBoxProps([]);
     // setBayId(0);
+    setStartPoint(null)
+    setDrawingData([])
+    setSavedPolygons([])
+    setAnnotating(false)
+    setAnnotatingBayId(null)
   };
 
   const checkAscendingOrder = (array) => {
@@ -267,6 +358,14 @@ function OnboardPopup() {
   //? Annotation with mouse click functions
   const handleMouseDown = (event) => {
     event.preventDefault();
+    if(Object.keys(sectionProps).length === 0 && !markingSection){
+      alert("Mark the section before drawing bays")
+      return
+    }
+    if(annotating || markingSection) {
+      return
+    }
+    // Drawing bay
     setDrawing(true);
     const x = event.clientX;
     const y = event.clientY;
@@ -348,8 +447,10 @@ function OnboardPopup() {
         const y2_scaled = Math.ceil((y2 - imgOffset.y) * scale_factor_y);
         return {
           id: id,
-          x: x1_scaled,
-          y: y1_scaled,
+          x_min: x1_scaled,
+          y_min: y1_scaled,
+          x_max: x2_scaled,
+          y_max: y2_scaled,
           width: x2_scaled - x1_scaled,
           height: y2_scaled - y1_scaled,
           configs: {
@@ -365,9 +466,293 @@ function OnboardPopup() {
     // eslint-disable-next-line
   }, [boxProps]);
 
+  // Polygon Scaling
+  useEffect(() => {
+    const transormedPolyons = savedPolygons.map(({polygonData, ...polygon}) => {
+      return {
+        ...polygon,
+        polygonData: transformArray([polygonData])[0],
+      }
+    })
+
+    setScaledSavedPolygons(
+      transormedPolyons.map(({polygonData, startPoint, ...transormedPolyon}) => {
+        const scaling_X = realDimension.width / plottedDimensions.width
+        const scaling_Y = realDimension.height / plottedDimensions.height
+        return {
+          ...transormedPolyon,
+          polygonData: polygonData.map((coord) => {
+            return {
+              x: (coord.x - Math.floor(imgOffset.x)) * scaling_X,
+              y: (coord.y - Math.floor(imgOffset.y)) * scaling_Y
+            }
+          })
+        }
+      })
+    )
+  }, [savedPolygons])
+  
+  // Image annotation
+  
+  const handleAnnotateBay = (event, id) => {
+    if(id === annotatingBayId){ // if annotatingBayId is not null and anotating bay is same as seleceted bay, this means the selection is shifted without pressing done
+      setAnnotating(false);
+      setAnnotatingBayId(null);
+    } else{
+      setAnnotating(true);
+      setAnnotatingBayId(id);
+    }
+    handleDone(event, id)         // Whenever selected bay is to be changed, complete the polygon drawing and then change
+
+  }
+
+  useEffect(() => {
+    if(annotatingBayId) {
+      const polygonWithAnnotatingBayId = savedPolygons.filter(polygon => polygon.bayId === annotatingBayId);
+      if(polygonWithAnnotatingBayId.length !== 0) {
+        setStartPoint(polygonWithAnnotatingBayId[0].startPoint);
+        setDrawingData(polygonWithAnnotatingBayId[0].polygonData.slice(0, -1));
+        const updatedSavedPolygons = savedPolygons.filter(polygon => polygon.bayId !== annotatingBayId);
+        setSavedPolygons(updatedSavedPolygons)
+      }
+    } 
+  }, [annotatingBayId])
+
+  const transformArray = (inputArray) => {
+    return inputArray.map((subArray) => subArray.map(({ start }) => start));
+  };
+
+  const reverseTransformArray = (inputArrays) => {
+    return inputArrays.map((inputArray) => {
+      return inputArray.map((point, index, array) => {
+        const nextIndex = (index + 1) % array.length;
+        return {
+          start: { x: point.x, y: point.y },
+          end:
+            array[nextIndex] !== undefined
+              ? { x: array[nextIndex].x, y: array[nextIndex].y }
+              : { x: array[0].x, y: array[0].y },
+        };
+      });
+    });
+  };
+
+  const handleMouseDownOnBay = (e, bayId) => {
+    if (drawing || !annotating || (bayId!==annotatingBayId)) {
+      return;
+    }
+    const offsetX = e.clientX;
+    const offsetY = e.clientY;
+    
+    if (startPoint) {
+      // Draw line if startPoint exists
+      setDrawingData((prevData) => [
+        ...prevData,
+        { start: startPoint, end: { x: offsetX, y: offsetY } },
+      ]);
+      setStartPoint({ x: offsetX, y: offsetY });
+    } else {
+      // Set startPoint if it doesn't exist
+      setStartPoint({ x: offsetX, y: offsetY });
+    }
+  };
+
+  const calculateHighlightPoints = () => {
+    const points = drawingData.map((line) => [line.start.x, line.start.y]);
+
+    if (points.length >= 3) {
+      // Add the last line's end point to close the shape for highlighting
+      points.push([
+        drawingData[drawingData.length - 1].end.x,
+        drawingData[drawingData.length - 1].end.y,
+      ]);
+    }
+
+    return points;
+  };
+  // console.log(drawingData)
+
+  const handleUndoDrawing = () => {
+    if (drawingData.length > 0) {
+      // Remove the last drawn line segment
+      setDrawingData((prevData) => prevData.slice(0, -1));
+
+      // If there are points left, update the startPoint to the last drawn point
+      if (drawingData.length > 1) {
+        setStartPoint({
+          x: drawingData[drawingData.length - 2].end.x,
+          y: drawingData[drawingData.length - 2].end.y,
+        });
+      } else {
+        // If no points left, reset startPoint to null
+        setStartPoint(null);
+      }
+    }
+  };
+
+  const handleDone = (e, bayId) => {
+    if (drawingData.length > 0) {
+      // Include the last dot when clicking "Done"
+      const completedPolygon = [
+        ...drawingData,
+        {
+          start: drawingData[drawingData.length - 1].end,
+          end: drawingData[0].start,
+        },
+      ];
+      const plottedArea = calculateAreaOfPolygon(...transformArray([completedPolygon]))
+      const polygon = {
+        bayId: bayId,
+        polygonData: completedPolygon,
+        startPoint: startPoint,      // Todo: set startPoint to end point of completed polygon
+        area: plottedArea,   // area in terms of pixels
+        actualArea: (ACTUAL_BLUSHLACE_AREA/(plottedDimensions.sectionArea))*plottedArea
+      }
+      // Save the drawn polygon to the list of saved polygons
+      setSavedPolygons((prevPolygons) => [...prevPolygons, polygon]);
+    }
+
+    // Reset drawingData and startPoint for a new polygon
+    setDrawingData([]);
+    setStartPoint(null);
+
+  };
+
+  const calculateAreaOfPolygon = (vertices) => {       // accepts an array of objects representing vertices with coordinates of its vertices
+    const n = vertices.length;
+    const area = vertices.reduce((acc, vertex, index) => {
+      const nextIndex = (index + 1) % n;
+      const { x: x1, y: y1 } = vertex;
+      const { x: x2, y: y2 } = vertices[nextIndex];
+      return acc + (x1 * y2 - x2 * y1);   // shoelace formula
+    }, 0);
+    return Math.abs(area) / 2;
+  }
+
+  // Marking section
+  const [markingSection, setMarkingSection] = useState(false);
+  const [sectionProps, setSectionProps] = useState({});
+  const [showGrid, setShowGrid] = useState(false);
+
+  const handleMouseDownOnImg = (event) => {
+    setDrawing(false)
+    if(markingSection) {
+      const x = event.clientX;
+      const y = event.clientY;
+      if (startPoint) {
+        // Draw line if startPoint exists
+        setDrawingData((prevData) => [
+          ...prevData,
+          { start: startPoint, end: { x: x, y: y } },
+        ]);
+        setStartPoint({ x: x, y: y });
+      } else {
+        // Set startPoint if it doesn't exist
+        setStartPoint({ x: x, y: y });
+      }
+      return
+    }
+
+  }
+
+  const handleClickMarkSection = (event) => {
+    if(!markingSection){
+      setMarkingSection(true);
+    } else {
+      if (drawingData.length > 0) {
+        // Include the last dot when clicking "Done"
+        const completedPolygon = [
+          ...drawingData,
+          {
+            start: drawingData[drawingData.length - 1].end,
+            end: drawingData[0].start,
+          },
+        ];
+        const plottedArea = calculateAreaOfPolygon(...transformArray([completedPolygon]))
+        const section = {
+          sectionData: completedPolygon,
+          startPoint: startPoint,      // Todo: set startPoint to end point of completed polygon
+          plottedArea: plottedArea,   // area in terms of pixels
+          actualArea: ACTUAL_BLUSHLACE_AREA
+        }
+        setSectionProps(section)
+      }
+      setShowGrid(true);
+      setDrawingData([]);
+      setStartPoint(null);
+      setMarkingSection(false);
+    }
+  }
+  // console.log("sectionProps", sectionProps)
+  // console.log("realDimension ", realDimension)
+  // console.log("plottedDimensions ", plottedDimensions)
+  
+// Adding Grid in marked section
+
+const realGridArea = 5; // sq.ft
+const cellSize = Math.round(Math.sqrt(realGridArea*(sectionProps.plottedArea/sectionProps.actualArea))); // Adjust the grid cell size as needed
+const totalGrids = Math.ceil(sectionProps.actualArea/realGridArea);
+const [polygonPoints, setPolygonPoints] = useState("");
+const [lines, setLines] = useState([]);
+const [minX, setMinX] = useState(Number.MAX_VALUE);
+const [maxX, setMaxX] = useState(Number.MIN_VALUE);
+const [minY, setMinY] = useState(Number.MAX_VALUE);
+const [maxY, setMaxY] = useState(Number.MIN_VALUE);
+
+useEffect(() => {
+  if (Object.keys(sectionProps).length !== 0) {
+    sectionProps.sectionData.forEach(({ start }) => {
+      setMinX((prevMinX) => Math.min(prevMinX, start.x));
+      setMaxX((prevMaxX) => Math.max(prevMaxX, start.x));
+      setMinY((prevMinY) => Math.min(prevMinY, start.y));
+      setMaxY((prevMaxY) => Math.max(prevMaxY, start.y));
+    });
+
+    setPolygonPoints(sectionProps.sectionData.map(({ start }) => `${start.x},${start.y}`).join(" "));
+  }
+  setPlottedDimensions(prevState => ({...prevState, sectionArea: sectionProps.plottedArea}))
+  setRealDimension(prevState => ({
+    ...prevState, 
+    sectionArea: ((realDimension.height*realDimension.width)/(plottedDimensions.height*plottedDimensions.width))*sectionProps.plottedArea
+  }))
+}, [sectionProps]);
+
+useEffect(() => {
+  setLines([]);
+  for (let x = minX; x <= maxX; x += cellSize) {
+    setLines((prevLines) => [
+      ...prevLines,
+      <line
+        key={`vertical-line-${x}`}
+        x1={x}
+        y1={minY}
+        x2={x}
+        y2={maxY}
+        stroke="red"
+        strokeWidth="0.5"
+      />
+    ]);
+  }
+
+  for (let y = minY; y <= maxY; y += cellSize) {
+    setLines((prevLines) => [
+      ...prevLines,
+      <line
+        key={`horizontal-line-${y}`}
+        x1={minX}
+        y1={y}
+        x2={maxX}
+        y2={y}
+        stroke="red"
+        strokeWidth="0.5"
+      />
+    ]);
+  }
+}, [minX, maxX, minY, maxY, cellSize]);
+
   return (
     <>
-      {/*Map button*/}
+      {/* Map button */}
       <button className="text-3xl text-emerald-500" onClick={handlePopupToggle}>
         <FaMapMarkedAlt />
       </button>
@@ -407,6 +792,11 @@ function OnboardPopup() {
               </div>
               <div className="flex flex-col-reverse lg:flex-row gap-2">
                 <DynamicButton
+                  title={markingSection?"Done":"MarkSection"}
+                  onClick={handleClickMarkSection}
+                  toolTip="Mark"
+                />
+                <DynamicButton
                   title="Clear"
                   icon={MdOutlineCleaningServices}
                   type={boxProps.length > 0 ? null : "disabled"}
@@ -440,7 +830,7 @@ function OnboardPopup() {
             </div>
             {/*Annotation Content*/}
             <div className="flex-grow flex">
-              <div className="flex-grow px-2 py-2 flex justify-center">
+              <div className="w-[70vw] px-2 py-2 flex justify-center">
                 <div
                   onMouseDown={handleMouseDown}
                   onMouseMove={handleMouseMove}
@@ -454,26 +844,113 @@ function OnboardPopup() {
                     src={floorLayout}
                     alt="img not found"
                     className="max-h-[86vh]"
+                    onMouseDown={handleMouseDownOnImg}
+                    style={{opacity: "0.8"}}
                   />
+                  
+                  {markingSection && drawingData.map((line, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        position: "absolute",
+                        top: line.start.y,
+                        left: line.start.x,
+                        width: Math.sqrt(
+                          Math.pow(line.end.x - line.start.x, 2) +
+                          Math.pow(line.end.y - line.start.y, 2)
+                        ),
+                        height: 2,
+                        backgroundColor: "red",
+                        transform: `rotate(${Math.atan2(
+                          line.end.y - line.start.y,
+                          line.end.x - line.start.x
+                        )}rad)`,
+                        transformOrigin: "0 0",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  ))}
+                  {markingSection && startPoint && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: startPoint.y - 2,
+                        left: startPoint.x - 2,
+                        width: 4,
+                        height: 4,
+                        backgroundColor: "red",
+                        borderRadius: "50%",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  )}
+                  <svg
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      pointerEvents: "none",
+                    }}
+                    width="100%"
+                    height="100%"
+                  >
+                    {/* {Object.keys(sectionProps).length > 0 &&
+                      <polygon
+                        fill="rgba(0, 0, 25, 0.2)"
+                        points={sectionProps.sectionData
+                          .flatMap((point) => [point.start.x, point.start.y])
+                          .join(" ")}
+                      />
+                    } */}
+                    <polygon
+                      fill="rgba(0, 255, 0, 0.3)"
+                      points={calculateHighlightPoints().flat().join(" ")}
+                    />
+                    {showGrid && (
+                      <svg
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          pointerEvents: "none",
+                          width: "100%",
+                          height: "100%",
+                        }}
+                      >
+                        <g>
+                          <defs>
+                            <clipPath id={`clip-path`}>
+                              <polygon fill="rgba(250, 125, 50, 0.3)" points={polygonPoints} />
+                            </clipPath>
+                          </defs>
+                          <g clipPath={`url(#clip-path`}>
+                            {lines}
+                          </g>
+                        </g>                      
+                    </svg>
+                  )}
+                  </svg>
+
+                  {/* Bays */}
                   {boxProps.map((box) => (
                     <div
                       key={box.id}
-                      className={`absolute border-2 border-white cursor-not-allowed ${
-                        hoveredBoxId === box.id
-                          ? "border-lime-500 bg-lime-500 bg-opacity-[.3]"
-                          : ""
-                      }`}
+                      className={`absolute border-2 border-${box.id === annotatingBayId?"green-500":"black"} cursor-${annotatingBayId === box.id ? "pointer":"not-allowed"} ${hoveredBoxId === box.id
+                        ? "border-lime-500 bg-lime-500 bg-opacity-[.3]"
+                        : ""
+                        }`}
                       style={{
                         left: box.x1,
                         top: box.y1,
                         width: box.width,
                         height: box.height,
                       }}
+                      onMouseDown={(e) => handleMouseDownOnBay(e, box.id)}
                     >
-                      <span className="relative text-white -top-6 left-1">
+                      <span className="relative text-black -top-6 left-1">
                         Bay {box.id}
                       </span>
-                      <div className="absolute text-white -bottom-6 left-1">
+                      <div className="absolute text-black -bottom-6 left-1">
                         {box.brand}
                       </div>
                     </div>
@@ -489,11 +966,74 @@ function OnboardPopup() {
                       }}
                     />
                   )}
+
+                  {/*bay annotation */}
+                  {!markingSection && drawingData.map((line, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        position: "absolute",
+                        top: line.start.y,
+                        left: line.start.x,
+                        width: Math.sqrt(
+                          Math.pow(line.end.x - line.start.x, 2) +
+                          Math.pow(line.end.y - line.start.y, 2)
+                        ),
+                        height: 2,
+                        backgroundColor: "red",
+                        transform: `rotate(${Math.atan2(
+                          line.end.y - line.start.y,
+                          line.end.x - line.start.x
+                        )}rad)`,
+                        transformOrigin: "0 0",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  ))}
+                  {!markingSection && startPoint && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: startPoint.y - 2,
+                        left: startPoint.x - 2,
+                        width: 4,
+                        height: 4,
+                        backgroundColor: "red",
+                        borderRadius: "50%",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  )}
+                  {!markingSection && <svg
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      pointerEvents: "none",
+                    }}
+                    width="100%"
+                    height="100%"
+                  >
+                    {savedPolygons.map(({polygonData}, polyIndex) => (
+                      <polygon
+                        key={polyIndex}
+                        fill="rgba(0, 255, 0, 0.3)"
+                        points={polygonData
+                          .flatMap((point) => [point.start.x, point.start.y])
+                          .join(" ")}
+                      />
+                    ))}
+
+                    <polygon
+                      fill="rgba(0, 255, 0, 0.3)"
+                      points={calculateHighlightPoints().flat().join(" ")}
+                    />
+                  </svg>}
                 </div>
               </div>
               {/*Table Content*/}
-              <Card className="">
-                <div className="w-[385px] h-[90vh] overflow-y-auto scrollbar">
+              <Card className="flex-1">
+                <div className="h-[90vh] overflow-y-auto scrollbar">
                   <Table stickyHeader sx={{ width: "100%" }}>
                     <TableHead sx={{ "& th": { backgroundColor: "#f1f5f9" } }}>
                       <TableRow>
@@ -511,9 +1051,12 @@ function OnboardPopup() {
                         <TableCell align="center" className="w-[36%]">
                           Brand
                         </TableCell>
-                        <TableCell align="center" className="w-[32.5%]">
+                        {savedPolygons.length!==0 && <TableCell align="center" className="w-[36%]">
+                          {"Annotation area (in sq.ft)"}
+                        </TableCell>}
+                        {<TableCell align="center" className="w-[32.5%]">
                           Actions
-                        </TableCell>
+                        </TableCell>}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -523,13 +1066,10 @@ function OnboardPopup() {
                             <input
                               type="number"
                               value={box.id}
-                              onChange={(e) =>
-                                handleInputChange(
-                                  index,
-                                  "id",
-                                  parseInt(e.target.value)
-                                )
-                              }
+                              onChange={(e) => {
+                                const newBayId = e.target.value; // Get the value directly as a string
+                                handleInputChange(index, "id", newBayId);
+                              }}
                               className="w-12 h-10 outline-none focus:border-blue-500 focus:border-2 text-center border rounded border-gray-400"
                             />
                           </TableCell>
@@ -557,8 +1097,31 @@ function OnboardPopup() {
                               </Select>
                             </FormControl>
                           </TableCell>
+                          { savedPolygons.length !== 0 && 
+                            <TableCell align="center">
+                              {savedPolygons.find((polygon) => polygon.bayId === box.id)?.actualArea.toFixed(2) || '_'}
+                            </TableCell>
+                          }
                           <TableCell align="center">
                             <div className="flex justify-center space-x-3">
+                              <Tooltip title={box.id === annotatingBayId ? "Done" : "Annotate"}>
+                                <IconButton
+                                  onClick={(e) => handleAnnotateBay(e, box.id)}
+                                >
+                                  { annotatingBayId === box.id ? <FaCheck color="#10b981"/> : <FaDrawPolygon /> }
+                                </IconButton>
+                              </Tooltip>
+                              { box.id===annotatingBayId && drawingData.length!==0 ? 
+                              <Tooltip title={"Undo"}>
+                                <IconButton
+                                    onClick={(e) => handleUndoDrawing(e)}
+                                  >
+                                    <GrUndo />
+                                  </IconButton>
+                              </Tooltip>
+                              :
+                              null
+                              }
                               <Tooltip title={"Configuration"}>
                                 <IconButton
                                   onClick={(e) => openConfigsMenu(e, box)}
