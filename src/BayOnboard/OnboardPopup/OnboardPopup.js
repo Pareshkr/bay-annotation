@@ -101,11 +101,23 @@ function OnboardPopup() {
 
   // Save button click function
   const handleClickSave = () => {
-    console.log("boxProps ", boxProps);
-    console.log("savedPolygons ", savedPolygons);
-    // console.log("transformed savedPolygons", transformArray(savedPolygons.map((polygon) => polygon.polygonData)))
-    console.log("saved scaled bays", scaledBoxProps);
-    console.log("saved scaled Polygons", scaledSavedPolygons);
+    const updatedScaledBoxProps = scaledBoxProps.map(box => {     // to be sent through API call
+      // Find the corresponding polygon from scaledSavedPolygons array
+      const matchingPolygon = scaledSavedPolygons.find(polygon => polygon.bayId === box.id);
+      // If a matching polygon is found, add it to the box object
+      if (matchingPolygon) {
+          return {
+              ...box,
+              polygon: matchingPolygon
+          };
+      } else {
+          // If no matching polygon is found, return the box object as it is
+          return box;
+      }
+    });
+    console.log("scaled boxProps", scaledBoxProps);
+    console.log("scaled savedPolygons", scaledSavedPolygons);
+    console.log("updated boxProps ", updatedScaledBoxProps);
   };
 
   // open configs menu
@@ -185,7 +197,7 @@ function OnboardPopup() {
   // };
   const handleInputChange = (index, field, value) => {
     if (value === "") {
-      console.log("Empty value detected, no update performed.");
+      alert("Empty value detected, no update performed.");
       return;
     }
   
@@ -196,9 +208,7 @@ function OnboardPopup() {
       return;
     }
   
-    const currentId = boxProps[index].id;
-    console.log("Current ID:", currentId);
-  
+    const currentId = boxProps[index].id;  
     // Create a copy of boxProps to test the new value
     const updatedBoxProps = [...boxProps];
     updatedBoxProps[index] = { ...updatedBoxProps[index], [field]: newValue };
@@ -437,8 +447,10 @@ function OnboardPopup() {
         const y2_scaled = Math.ceil((y2 - imgOffset.y) * scale_factor_y);
         return {
           id: id,
-          x: x1_scaled,
-          y: y1_scaled,
+          x_min: x1_scaled,
+          y_min: y1_scaled,
+          x_max: x2_scaled,
+          y_max: y2_scaled,
           width: x2_scaled - x1_scaled,
           height: y2_scaled - y1_scaled,
           configs: {
@@ -464,7 +476,7 @@ function OnboardPopup() {
     })
 
     setScaledSavedPolygons(
-      transormedPolyons.map(({polygonData, ...transormedPolyon}) => {
+      transormedPolyons.map(({polygonData, startPoint, ...transormedPolyon}) => {
         const scaling_X = realDimension.width / plottedDimensions.width
         const scaling_Y = realDimension.height / plottedDimensions.height
         return {
@@ -508,6 +520,21 @@ function OnboardPopup() {
 
   const transformArray = (inputArray) => {
     return inputArray.map((subArray) => subArray.map(({ start }) => start));
+  };
+
+  const reverseTransformArray = (inputArrays) => {
+    return inputArrays.map((inputArray) => {
+      return inputArray.map((point, index, array) => {
+        const nextIndex = (index + 1) % array.length;
+        return {
+          start: { x: point.x, y: point.y },
+          end:
+            array[nextIndex] !== undefined
+              ? { x: array[nextIndex].x, y: array[nextIndex].y }
+              : { x: array[0].x, y: array[0].y },
+        };
+      });
+    });
   };
 
   const handleMouseDownOnBay = (e, bayId) => {
@@ -662,7 +689,7 @@ function OnboardPopup() {
   
 // Adding Grid in marked section
 
-const realGridArea = 2; // sq.ft
+const realGridArea = 5; // sq.ft
 const cellSize = Math.round(Math.sqrt(realGridArea*(sectionProps.plottedArea/sectionProps.actualArea))); // Adjust the grid cell size as needed
 const totalGrids = Math.ceil(sectionProps.actualArea/realGridArea);
 const [polygonPoints, setPolygonPoints] = useState("");
@@ -702,7 +729,7 @@ useEffect(() => {
         x2={x}
         y2={maxY}
         stroke="red"
-        strokeWidth="0.8"
+        strokeWidth="0.5"
       />
     ]);
   }
@@ -717,7 +744,7 @@ useEffect(() => {
         x2={maxX}
         y2={y}
         stroke="red"
-        strokeWidth="0.8"
+        strokeWidth="0.5"
       />
     ]);
   }
